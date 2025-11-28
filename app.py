@@ -71,34 +71,112 @@ logging.basicConfig(filename='app.log', level=logging.ERROR,
 # --- STREAMLIT PAGE CONFIG ---
 st.set_page_config(layout="wide", page_title=APP_TITLE, page_icon=APP_ICON)
 
-# --- CUSTOM CSS (TEAL/OCEAN THEME) ---
+# --- CUSTOM CSS (DARK OCEAN THEME) ---
 st.markdown("""
 <style>
-    /* Main Background */
+    /* 1. Main Background - Deep Ocean Navy */
     .stApp {
-        background-color: #e6fffa;
+        background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+        color: #e2e8f0; /* Light Gray/White Text */
     }
-    /* Primary Headers */
-    h1, h2, h3 {
-        color: #0e7490; 
+
+    /* 2. Sidebar Background */
+    [data-testid="stSidebar"] {
+        background-color: #020617;
+        border-right: 1px solid #1e293b;
     }
-    /* Cards/Containers */
-    .stMetric {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+
+    /* 3. Headers (H1, H2, H3) - Bright Cyan/Teal */
+    h1, h2, h3, h4, h5 {
+        color: #22d3ee !important; /* Cyan-400 */
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
     }
-    /* Buttons */
+
+    /* 4. Cards / Metrics - Dark Blue with Glow */
+    div[data-testid="metric-container"] {
+        background-color: #1e293b; /* Slate-800 */
+        border: 1px solid #334155;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        transition: transform 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        border-color: #22d3ee; /* Cyan Glow on Hover */
+    }
+    
+    /* Label color inside metrics */
+    div[data-testid="metric-container"] > label {
+        color: #94a3b8 !important; /* Muted Blue-Gray */
+    }
+    
+    /* Value color inside metrics */
+    div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+        color: #f1f5f9 !important; /* Bright White */
+    }
+
+    /* 5. Buttons - Bright Gradient Cyan */
     .stButton>button {
-        background-color: #0e7490;
+        background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
         color: white;
-        border-radius: 5px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px 0 rgba(8, 145, 178, 0.39);
     }
     .stButton>button:hover {
-        background-color: #155e75;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(8, 145, 178, 0.23);
+        background: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%);
         color: white;
     }
+
+    /* 6. Inputs (Text Input, Number Input) */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea>div>div>textarea {
+        background-color: #1e293b; /* Dark Slate */
+        color: #ffffff;
+        border: 1px solid #334155;
+        border-radius: 8px;
+    }
+    .stTextInput>div>div>input:focus {
+        border-color: #22d3ee;
+        box-shadow: 0 0 0 1px #22d3ee;
+    }
+    
+    /* 7. Selectbox & Dropdowns */
+    .stSelectbox>div>div>div {
+        background-color: #1e293b;
+        color: white;
+    }
+
+    /* 8. Dataframes/Tables */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #334155;
+        border-radius: 10px;
+        background-color: #0f172a;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        color: #94a3b8;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1e293b;
+        color: #22d3ee;
+        border-bottom: 2px solid #22d3ee;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -618,8 +696,13 @@ def show_ca_dashboard():
                     daily_trend['Date'] = daily_trend['Date'].astype(str)
                     
                     if PLOTLY_AVAILABLE:
-                        fig = px.bar(daily_trend, x='Date', y='Amount', title='Monthly Net Flow')
-                        st.plotly_chart(fig, use_container_width=True)
+                        fig = px.bar(daily_trend, x='Date', y='Amount', title='Monthly Net Flow', template="plotly_dark")
+                        fig.update_traces(marker_color='#22d3ee') # Bright Cyan Bars
+                        fig.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)', # Transparent background
+                            paper_bgcolor='rgba(0,0,0,0)', # Transparent paper
+                            font_color='#e2e8f0' # Light text
+                        )
                     else:
                         st.warning("Plotly not installed. Using basic Streamlit chart.")
                         st.bar_chart(daily_trend.set_index('Date')['Amount'])
