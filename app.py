@@ -313,7 +313,7 @@ def call_gemini_summary(text: str) -> str:
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # PROMPT ENGINEERING:
         prompt = f"""
@@ -783,7 +783,7 @@ def show_ca_dashboard():
                     else:
                         try:
                             genai.configure(api_key=st.session_state["gemini_api_key"])
-                            model = genai.GenerativeModel('gemini-pro')
+                            model = genai.GenerativeModel('gemini-1.5-flash')
                             response = model.generate_content(prompt)
                             st.markdown(response.text)
                         except Exception as e:
@@ -803,7 +803,7 @@ def show_ca_dashboard():
                 else:
                     try:
                         genai.configure(api_key=st.session_state["gemini_api_key"])
-                        model = genai.GenerativeModel('gemini-pro')
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         response = model.generate_content(prompt)
                         st.session_state['generated_memo'] = response.text
                     except Exception as e:
