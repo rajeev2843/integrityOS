@@ -44,7 +44,11 @@ from typing import Optional, List, Dict, Any
 import hashlib
 
 # Visualization
-import plotly.express as px
+try:
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
 
 # AI & PDF
 import google.generativeai as genai
@@ -612,8 +616,14 @@ def show_ca_dashboard():
                 if 'Date' in df.columns:
                     daily_trend = df.groupby(df['Date'].dt.to_period('M'))['Amount'].sum().reset_index()
                     daily_trend['Date'] = daily_trend['Date'].astype(str)
-                    fig = px.bar(daily_trend, x='Date', y='Amount', title='Monthly Net Flow')
-                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    if PLOTLY_AVAILABLE:
+                        fig = px.bar(daily_trend, x='Date', y='Amount', title='Monthly Net Flow')
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Plotly not installed. Using basic Streamlit chart.")
+                        st.bar_chart(daily_trend.set_index('Date')['Amount'])
+
             
             with tab_risk:
                 st.subheader("🚩 Red Flag Transactions")
