@@ -14,7 +14,7 @@ A single-file Streamlit application for Chartered Accountants involving:
 Dependencies:
 -------------
 Create a virtual environment and install the following:
-# pip install streamlit pandas numpy pyodbc PyPDF2 google-generativeai plotly werkzeug openpyxl
+# pip install streamlit pandas numpy pyodbc PyPDF2 google-generativeai plotly openpyxl
 
 Configuration:
 --------------
@@ -40,7 +40,8 @@ from email.message import EmailMessage
 from typing import Optional, List, Dict, Any
 
 # Security & Hashing
-from werkzeug.security import generate_password_hash, check_password_hash
+# FIX: Switched from werkzeug to hashlib to avoid Version 3.0+ import errors
+import hashlib
 
 # Visualization
 import plotly.express as px
@@ -67,7 +68,6 @@ logging.basicConfig(filename='app.log', level=logging.ERROR,
 st.set_page_config(layout="wide", page_title=APP_TITLE, page_icon=APP_ICON)
 
 # --- CUSTOM CSS (TEAL/OCEAN THEME) ---
-# This CSS mimics the requested .streamlit/config.toml theme instructions
 st.markdown("""
 <style>
     /* Main Background */
@@ -98,14 +98,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIG.TOML COMMENT BLOCK ---
-# To use the strict theme settings in a config file, copy below to .streamlit/config.toml
-# [theme]
-# primaryColor = "#0e7490"
-# backgroundColor = "#e6fffa"
-# secondaryBackgroundColor = "#cffafe"
-# textColor = "#002b36"
-# font = "sans serif"
+# --- SECURITY UTILS (HASHLIB REPLACEMENT) ---
+
+def generate_password_hash(password: str) -> str:
+    """Generates a SHA256 hash for the password (Demo purpose)."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def check_password_hash(stored_hash: str, password: str) -> bool:
+    """Verifies a password against the stored SHA256 hash."""
+    return stored_hash == hashlib.sha256(password.encode()).hexdigest()
 
 # --- DATABASE & AUTHENTICATION UTILS ---
 
@@ -157,7 +158,6 @@ def create_db_and_seed():
     try:
         # Seed CA Admin
         # SECURITY CAVEAT: In production, never hardcode passwords. 
-        # These are for demo purposes as requested.
         c.execute("SELECT * FROM users WHERE username = ?", ("ca_admin",))
         if not c.fetchone():
             pw_hash = generate_password_hash("CApass123!")
@@ -224,11 +224,6 @@ def log_file_upload(filename_disk, original_name, uploader, role, ftype, note=""
 def call_gemini_summary(text: str) -> str:
     """
     Interacts with Google Gemini API for summarization.
-    
-    Prompt Strategy:
-    - Sets a persona: "Accounting summarization assistant".
-    - Uses Zero-shot prompting for general summaries.
-    - Includes fallback logic.
     """
     api_key = st.session_state.get("gemini_api_key")
     if not api_key:
@@ -239,7 +234,6 @@ def call_gemini_summary(text: str) -> str:
         model = genai.GenerativeModel('gemini-pro')
         
         # PROMPT ENGINEERING:
-        # We explicitly define the role and the task.
         prompt = f"""
         You are an expert Chartered Accountant and AI assistant. 
         Please analyze the following text extracted from a financial document.
@@ -249,7 +243,6 @@ def call_gemini_summary(text: str) -> str:
         Text content:
         {text[:8000]} 
         """ 
-        # Note: Truncated to 8000 chars to avoid token limits in this demo
         
         response = model.generate_content(prompt)
         return response.text
@@ -260,10 +253,6 @@ def call_gemini_summary(text: str) -> str:
 def send_email_smtp(to_email, subject, body):
     """
     Sends email via Gmail SMTP.
-    
-    SECURITY CAVEAT:
-    - Requires 'Less Secure Apps' enabled or an 'App Password' if 2FA is on (Recommended).
-    - Credentials are read from Session State (User input), never hardcoded in source.
     """
     smtp_server = st.session_state.get("smtp_host", "smtp.gmail.com")
     smtp_port = 587
@@ -297,19 +286,13 @@ def send_email_smtp(to_email, subject, body):
 def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
     """
     Central function to ingest data from Excel, XML, or Tally ODBC.
-    Normalizes data to a standard DataFrame structure:
-    [Date, Ledger_Name, Voucher_Type, Amount, Narration]
     """
     df = pd.DataFrame()
     
     # 1. EXCEL UPLOAD
     if source_type == "Upload Excel" and uploaded_file is not None:
         try:
-            # Attempt to read excel
             raw_df = pd.read_excel(uploaded_file)
-            
-            # Simple column mapper (Naively looks for keywords)
-            # In a real app, this would be more robust or user-mappable
             col_map = {}
             for col in raw_df.columns:
                 l_col = col.lower()
@@ -321,16 +304,13 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
             
             df = raw_df.rename(columns=col_map)
             
-            # Ensure required columns exist, fill missing with defaults
             required = ["Date", "Ledger_Name", "Voucher_Type", "Amount", "Narration"]
             for r in required:
                 if r not in df.columns:
                     df[r] = np.nan if r != "Amount" else 0.0
 
-            # Clean Amount
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-            
             return df
             
         except Exception as e:
@@ -340,13 +320,10 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
     # 2. TALLY XML PARSING
     elif source_type == "Tally XML" and uploaded_file is not None:
         try:
-            # Tally XML usually exports vouchers. 
-            # Structure: <TALLYMESSAGE><VOUCHER><DATE>...</DATE><LEDGERENTRIES.LIST>...
             tree = ET.parse(uploaded_file)
             root = tree.getroot()
-            
             rows = []
-            # This is a simplified parser logic for generic Tally XML export
+            
             for message in root.findall('.//TALLYMESSAGE'):
                 voucher = message.find('VOUCHER')
                 if voucher is not None:
@@ -354,7 +331,6 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
                     v_type = voucher.find('VOUCHERTYPENAME').text if voucher.find('VOUCHERTYPENAME') is not None else "Unknown"
                     narration = voucher.find('NARRATION').text if voucher.find('NARRATION') is not None else ""
                     
-                    # Iterate ledger entries
                     for entry in voucher.findall('.//LEDGERENTRIES.LIST'):
                         l_name = entry.find('LEDGERNAME').text if entry.find('LEDGERNAME') is not None else "Unknown"
                         amt = entry.find('AMOUNT').text if entry.find('AMOUNT') is not None else "0"
@@ -382,28 +358,13 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
     # 3. LIVE TALLY ODBC
     elif source_type == "Live Tally ODBC":
         st.info("Attempting connection to Tally Prime via ODBC...")
-        
-        # ODBC EXPLANATION:
-        # Tally Prime acts as an ODBC server on port 9000 (default).
-        # We use pyodbc to connect using the "Tally ODBC Driver".
-        
-        # Sample pyodbc connection string (Tally/ODBC):
-        # conn_str = "DRIVER={Tally ODBC Driver64};Server=localhost;PORT=9000;"
-        # Note: Driver name might vary "Tally ODBC Driver" or "Tally ODBC Driver64".
-        
+        # Note: Will likely fail on Cloud, but logic is sound for local
         conn_str = "DRIVER={Tally ODBC Driver64};Server=localhost;PORT=9000;"
         
         try:
-            # We wrap this in try/except because the judge likely doesn't have Tally running.
-            # Only runs if driver exists and Tally is open.
             conn = pyodbc.connect(conn_str, timeout=2)
-            
-            # SQL Query for Tally
             query = "SELECT $Date, $LedgerName, $VoucherTypeName, $Amount, $Narration FROM LedgerDetails"
-            
             df = pd.read_sql(query, conn)
-            
-            # Remap Tally ODBC columns to standard
             df.rename(columns={
                 "$Date": "Date", 
                 "$LedgerName": "Ledger_Name", 
@@ -411,27 +372,20 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
                 "$Amount": "Amount",
                 "$Narration": "Narration"
             }, inplace=True)
-            
             conn.close()
             return df
-            
         except Exception as e:
             st.error("Tally Connection Failed. Ensure Tally Prime is open and ODBC port is 9000.")
             st.caption(f"Technical Error: {e}")
-            # Do NOT fabricate data. Return None as requested.
             return None
 
-    # 4. AI SCAN PDF (Text Extraction only here, Summary logic separate)
+    # 4. AI SCAN PDF
     elif source_type == "AI Scan PDF" and uploaded_file is not None:
         try:
             reader = PyPDF2.PdfReader(uploaded_file)
             text = ""
             for page in reader.pages:
                 text += page.extract_text() + "\n"
-            
-            # We return a DataFrame with one row containing the text 
-            # to keep signature consistent, or handle purely in UI.
-            # Here we wrap it in a pseudo-DF for consistency
             return pd.DataFrame([{"Raw_Text": text}])
         except Exception as e:
             st.error(f"Error reading PDF: {e}")
@@ -443,13 +397,7 @@ def load_data(source_type: str, uploaded_file=None) -> pd.DataFrame:
 
 def run_integrity_scan(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Logic:
-    1. Benford/Round Numbers: Fraud often uses round numbers (000/500).
-    2. Weekend Entries: Professional entries rarely happen on Sun/Sat.
-    3. High Value: > 50,000 INR.
-    
-    Returns: high_risk_df with 'risk_reasons'.
-    Also calculates a global Risk Score (0-100).
+    Audit Rules: Round Numbers, Weekends, High Value.
     """
     if df.empty or 'Amount' not in df.columns:
         return pd.DataFrame(), 0
@@ -458,14 +406,11 @@ def run_integrity_scan(df: pd.DataFrame) -> pd.DataFrame:
     df['risk_reasons'] = ""
     df['is_risky'] = False
     
-    # Pre-calculations
     df['Amount_Abs'] = df['Amount'].abs()
     if 'Date' in df.columns:
-        # 5=Saturday, 6=Sunday
         df['DayOfWeek'] = df['Date'].dt.dayofweek 
 
     # Rule 1: Round Numbers
-    # amount % 1000 == 0 or amount % 500 == 0
     mask_round = (df['Amount_Abs'] > 0) & ((df['Amount_Abs'] % 1000 == 0) | (df['Amount_Abs'] % 500 == 0))
     df.loc[mask_round, 'risk_reasons'] += "Round Number; "
     df.loc[mask_round, 'is_risky'] = True
@@ -481,23 +426,16 @@ def run_integrity_scan(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[mask_high, 'risk_reasons'] += "High Value (>50k); "
     df.loc[mask_high, 'is_risky'] = True
 
-    # Filter High Risk
     high_risk_df = df[df['is_risky'] == True].copy()
     
-    # Calculate Risk Score (0 - 100)
-    # Formula rationale: 
-    # Base score determined by % of transaction count flagged + % of volume flagged.
+    # Calculate Risk Score
     total_tx = len(df)
     risky_tx = len(high_risk_df)
-    
     if total_tx > 0:
         ratio_count = risky_tx / total_tx
-        
         total_vol = df['Amount_Abs'].sum()
         risky_vol = high_risk_df['Amount_Abs'].sum()
         ratio_vol = risky_vol / total_vol if total_vol > 0 else 0
-        
-        # Weighted Score
         risk_score = int((ratio_count * 50) + (ratio_vol * 50))
         risk_score = min(100, risk_score)
     else:
@@ -506,53 +444,37 @@ def run_integrity_scan(df: pd.DataFrame) -> pd.DataFrame:
     return high_risk_df, risk_score
 
 def generate_pbc_list(df: pd.DataFrame) -> List[str]:
-    """
-    Scans Ledger names to auto-suggest documents the client needs to upload.
-    """
+    """Generates document requests based on ledger names."""
     if df.empty or "Ledger_Name" not in df.columns:
         return []
 
     ledgers = df['Ledger_Name'].astype(str).str.lower().unique()
     requirements = set()
 
-    # Heuristics
     for l in ledgers:
-        if "rent" in l:
-            requirements.add("Rent Agreement")
-        if any(x in l for x in ["electricity", "power", "fuel"]):
-            requirements.add("Utility Bills")
-        if any(x in l for x in ["legal", "advocate", "court"]):
-            requirements.add("Case Files / Legal Notices")
-        if "salary" in l:
-            requirements.add("Payroll / PT Challans")
+        if "rent" in l: requirements.add("Rent Agreement")
+        if any(x in l for x in ["electricity", "power", "fuel"]): requirements.add("Utility Bills")
+        if any(x in l for x in ["legal", "advocate", "court"]): requirements.add("Case Files / Legal Notices")
+        if "salary" in l: requirements.add("Payroll / PT Challans")
             
     return list(requirements)
 
 def esg_analysis(df: pd.DataFrame) -> dict:
-    """
-    Calculates carbon footprint based on electricity spend.
-    Assumptions:
-    - Avg cost per unit: 8 INR
-    - Grid Emission Factor: 0.82 kg CO2 per unit
-    """
+    """Calculates carbon footprint."""
     results = {"estimated_units": 0, "co2_tons": 0, "explanation": "No data"}
     
     if df.empty or "Ledger_Name" not in df.columns:
         return results
 
-    # Filter Electricity/Power ledgers
     mask = df['Ledger_Name'].astype(str).str.contains('Electricity|Power', case=False, regex=True)
     subset = df[mask]
-    
     total_spend = subset['Amount'].abs().sum()
     
     if total_spend > 0:
-        # Math
         avg_cost_per_unit = 8.0
         estimated_units = total_spend / avg_cost_per_unit
         co2_kg = estimated_units * 0.82
         co2_tons = co2_kg / 1000.0
-        
         results = {
             "estimated_units": round(estimated_units, 2),
             "co2_tons": round(co2_tons, 4),
@@ -570,13 +492,11 @@ def main():
     # 1. Sidebar Logic
     st.sidebar.title(f"{APP_ICON} IntegrityOS")
     
-    # Session State Initialization
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
         st.session_state["username"] = None
         st.session_state["role"] = None
     
-    # Sidebar: API Keys & Config (Only show if logged in usually, but visible for setup)
     if st.session_state["logged_in"]:
         st.sidebar.divider()
         st.session_state["gemini_api_key"] = st.sidebar.text_input("Gemini API Key", type="password", help="Required for AI features")
@@ -590,12 +510,6 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.clear()
             st.rerun()
-
-        # Admin tool
-        if st.session_state["role"] == "CA":
-            if st.sidebar.button("Reset DB (Admin)"):
-                # Ideally, delete users.db and rerun seed.
-                st.warning("Feature disabled for safety in this demo.")
 
     # 2. Main Page Routing
     if not st.session_state["logged_in"]:
@@ -641,31 +555,25 @@ def show_login_page():
 def show_ca_dashboard():
     st.title("CA Dashboard - Audit Command Center")
     
-    # Source Selection
     st.sidebar.subheader("Data Input")
     data_source = st.sidebar.radio("Select Source", 
                                    ["Upload Excel", "Tally XML", "AI Scan PDF", "Live Tally ODBC"])
     
-    # Module Selection
     module = st.sidebar.radio("Select Module", ["Smart Audit", "ESG Copilot", "Report Generator"])
 
-    # File Handling Logic based on source
     df = None
     pdf_text = None
     
     if data_source in ["Upload Excel", "Tally XML", "AI Scan PDF"]:
         uploaded_file = st.file_uploader(f"Upload {data_source} File")
         if uploaded_file:
-            # Save to disk logic
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             save_path = os.path.join(UPLOAD_FOLDER, f"{timestamp}_{uploaded_file.name}")
             with open(save_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
-            # DB Record
             log_file_upload(save_path, uploaded_file.name, st.session_state["username"], "CA", data_source)
             
-            # Load Data
             if data_source == "AI Scan PDF":
                 raw_data = load_data(data_source, uploaded_file)
                 if raw_data is not None and not raw_data.empty:
@@ -682,20 +590,14 @@ def show_ca_dashboard():
             if df is not None:
                 st.success("Connected to Tally Live Data.")
 
-    # --- MODULE 1: SMART AUDIT ---
     if module == "Smart Audit":
         st.header("🕵️ Smart Audit Detective")
         
         if df is not None and not df.empty:
-            # Run Scan
             high_risk_df, risk_score = run_integrity_scan(df)
-            
-            # Metrics
             c1, c2, c3, c4 = st.columns(4)
-            rev = df[df['Amount'] > 0]['Amount'].sum() # Assuming +ve is Credit/Rev
+            rev = df[df['Amount'] > 0]['Amount'].sum()
             exp = df[df['Amount'] < 0]['Amount'].sum()
-            
-            # Generate PBC to count pending docs
             pbc_list = generate_pbc_list(df)
             
             c1.metric("Total Credit", f"₹{rev:,.0f}")
@@ -704,13 +606,10 @@ def show_ca_dashboard():
             c4.metric("Pending Docs", len(pbc_list))
             
             st.divider()
-            
-            # Visuals
             tab_viz, tab_risk, tab_pbc = st.tabs(["Trends", "High Risk Tx", "PBC Checklist"])
             
             with tab_viz:
                 if 'Date' in df.columns:
-                    # Daily/Monthly Trend
                     daily_trend = df.groupby(df['Date'].dt.to_period('M'))['Amount'].sum().reset_index()
                     daily_trend['Date'] = daily_trend['Date'].astype(str)
                     fig = px.bar(daily_trend, x='Date', y='Amount', title='Monthly Net Flow')
@@ -720,18 +619,14 @@ def show_ca_dashboard():
                 st.subheader("🚩 Red Flag Transactions")
                 if not high_risk_df.empty:
                     st.dataframe(high_risk_df[['Date', 'Ledger_Name', 'Amount', 'risk_reasons']])
-                    
-                    # Review Mechanism
                     tx_to_review = st.selectbox("Select Transaction to Mark Reviewed", high_risk_df.index)
                     if st.button("Mark as Reviewed"):
-                        # In a real app, update a 'status' column in DB
                         st.success(f"Transaction {tx_to_review} marked reviewed.")
                 else:
-                    st.success("No High Risk transactions detected by rules.")
+                    st.success("No High Risk transactions detected.")
             
             with tab_pbc:
                 st.subheader("Required Documents (PBC)")
-                st.write("Based on ledger scan, please request these from client:")
                 for item in pbc_list:
                     st.checkbox(item, value=False)
                     
@@ -740,58 +635,41 @@ def show_ca_dashboard():
             if st.button("Analyze PDF with Gemini"):
                 summary = call_gemini_summary(pdf_text)
                 st.markdown(summary)
-                
         else:
             st.info("Please upload data or connect Tally to begin Audit.")
 
-    # --- MODULE 2: ESG COPILOT ---
     elif module == "ESG Copilot":
         st.header("🌱 ESG & Sustainability Copilot")
-        
         if df is not None:
-            # Carbon Calc
             esg_data = esg_analysis(df)
-            
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Estimated CO2 Emissions", f"{esg_data['co2_tons']} Tons")
                 st.caption(esg_data['explanation'])
-            
             with col2:
                 st.info("Emission Factor Source: Indian Grid Avg (0.82 kg/kWh)")
-
             st.divider()
             
-            # Vendor Check
-            st.subheader("Vendor ESG Screening (Heuristic)")
+            st.subheader("Vendor ESG Screening")
             vendors = df['Ledger_Name'].unique()
             vendor_data = []
-            
             for v in vendors:
                 v_str = str(v)
                 status = "⚪ Neutral"
-                if "Ltd" in v_str and "Green" not in v_str:
-                    status = "🟠 Moderate Risk (General Corp)"
-                if any(x in v_str for x in ["Green", "Eco", "Solar", "Recycle"]):
-                    status = "🟢 Low Risk (Sustainable)"
-                if "Private" in v_str:
-                    status = "🔴 High Risk (Unverified Pvt)"
-                
+                if "Ltd" in v_str and "Green" not in v_str: status = "🟠 Moderate Risk"
+                if any(x in v_str for x in ["Green", "Eco", "Solar"]): status = "🟢 Low Risk"
+                if "Private" in v_str: status = "🔴 High Risk"
                 vendor_data.append({"Vendor": v, "ESG Status": status})
             
             v_df = pd.DataFrame(vendor_data)
             st.dataframe(v_df, use_container_width=True)
-            
             csv = v_df.to_csv(index=False)
             st.download_button("Download ESG Summary", csv, "esg_summary.csv", "text/csv")
-            
         else:
             st.info("Upload financial data to calculate Carbon Footprint.")
 
-    # --- MODULE 3: REPORT GENERATOR ---
     elif module == "Report Generator":
         st.header("📝 AI Report Studio")
-        
         tabs = st.tabs(["BRSR Questionnaire", "CEO Memo Drafter"])
         
         with tabs[0]:
@@ -802,16 +680,11 @@ def show_ca_dashboard():
                 csr_activity = st.text_area("CSR Activities conducted")
                 
                 if st.form_submit_button("Generate Report Draft"):
-                    # PROMPT ENGINEERING for BRSR
                     prompt = f"""
                     You are an experienced Indian CA. 
                     Create a Section A and Section B outline for a BRSR report based on:
-                    Turnover: {turnover}
-                    Employees: {employees}
-                    CSR: {csr_activity}
-                    Generate professional text suitable for a corporate filing.
+                    Turnover: {turnover}, Employees: {employees}, CSR: {csr_activity}
                     """
-                    
                     if not st.session_state.get("gemini_api_key"):
                         st.error("AI Key missing.")
                     else:
@@ -819,32 +692,19 @@ def show_ca_dashboard():
                             genai.configure(api_key=st.session_state["gemini_api_key"])
                             model = genai.GenerativeModel('gemini-pro')
                             response = model.generate_content(prompt)
-                            st.markdown("### Generated Draft")
                             st.markdown(response.text)
-                            
-                            # Save Logic (Mock)
-                            st.success("Draft generated. Copy text to save.")
                         except Exception as e:
                             st.error(f"AI Error: {e}")
 
         with tabs[1]:
             st.subheader("CEO Memo Drafter")
-            st.caption("Drafts a memo summarizing audit findings to the client.")
-            
-            memo_points = st.text_area("Key Observations (Bullet points)", height=100)
-            
+            memo_points = st.text_area("Key Observations", height=100)
             if st.button("Draft Memo with AI"):
-                # PROMPT ENGINEERING for Memo
                 prompt = f"""
                 You are a senior partner at an audit firm. 
-                Draft a polite but firm memo to the CEO of a client company.
-                Subject: Internal Audit Observations.
-                Points to cover:
-                {memo_points}
-                
-                End with a call to action for a meeting next week.
+                Draft a polite but firm memo to the CEO. Subject: Internal Audit Observations.
+                Points: {memo_points}
                 """
-                
                 if not st.session_state.get("gemini_api_key"):
                     st.error("AI Key missing.")
                 else:
@@ -859,55 +719,40 @@ def show_ca_dashboard():
             if 'generated_memo' in st.session_state:
                 final_memo = st.text_area("Edit Memo", st.session_state['generated_memo'], height=300)
                 client_email = st.text_input("Client Email")
-                
                 if st.button("Send via SMTP"):
                     if send_email_smtp(client_email, "Audit Memo", final_memo):
-                        st.success("Email sent successfully!")
+                        st.success("Email sent!")
 
 def show_client_dashboard():
     st.title("Client Portal")
     st.info(f"Logged in as: {st.session_state['username']}")
-    
     tab1, tab2 = st.tabs(["Upload Documents", "My Files"])
     
     with tab1:
         st.subheader("Pending Documents (PBC)")
-        # In a real app, this would fetch the PBC list saved by the CA in the DB
-        # For this single file demo, we simulate a request list
-        st.write("Please upload the following documents requested by your Auditor:")
-        st.info("1. Rent Agreement (Mar 2024)\n2. Electricity Bill (Apr 2024)")
-        
-        uploaded_file = st.file_uploader("Select File", type=['xlsx', 'pdf', 'jpg', 'png', 'docx'])
+        st.write("Please upload: 1. Rent Agreement, 2. Electricity Bill")
+        uploaded_file = st.file_uploader("Select File", type=['xlsx', 'pdf', 'jpg', 'docx'])
         notes = st.text_input("Notes for Auditor")
-        
         if uploaded_file and st.button("Submit to CA"):
             user_folder = os.path.join(UPLOAD_FOLDER, st.session_state['username'])
-            if not os.path.exists(user_folder):
-                os.makedirs(user_folder)
-            
+            if not os.path.exists(user_folder): os.makedirs(user_folder)
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             save_path = os.path.join(user_folder, f"{timestamp}_{uploaded_file.name}")
-            
             with open(save_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-                
             log_file_upload(save_path, uploaded_file.name, st.session_state["username"], "Client", "PBC", notes)
-            st.success("File uploaded successfully. Sent to CA.")
+            st.success("File uploaded successfully.")
 
     with tab2:
         st.subheader("Upload History")
         conn = sqlite3.connect(DB_FILE)
-        # Show only files uploaded by this user
         my_files = pd.read_sql("SELECT original_filename, timestamp, notes FROM files WHERE uploader_username = ?", 
                                conn, params=(st.session_state['username'],))
         conn.close()
-        
         if not my_files.empty:
             st.dataframe(my_files)
         else:
             st.write("No files uploaded yet.")
-
-# --- ENTRY POINT ---
 
 if __name__ == "__main__":
     main()
