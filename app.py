@@ -10,25 +10,45 @@ st.set_page_config(page_title="IntegrityOS", layout="wide", page_icon="🏛️")
 # Custom CSS for "Teal & Navy" Professional Theme
 st.markdown("""
     <style>
+    /* Main Background */
     .main {
         background-color: #F0F2F6;
     }
+    
+    /* Headings */
     h1, h2, h3 {
         color: #002B36; /* Navy */
     }
-    .stMetric {
+    
+    /* The Metric Cards - FORCE TEXT COLOR */
+    div[data-testid="stMetric"] {
         background-color: #FFFFFF;
         padding: 15px;
         border-radius: 5px;
         border-left: 5px solid #008080; /* Teal */
         box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
     }
+    
+    /* Force the Label (Top text) to be Dark Navy */
+    div[data-testid="stMetricLabel"] p {
+        color: #002B36 !important;
+        font-weight: 600;
+    }
+    
+    /* Force the Value (Big Number) to be Dark Navy */
+    div[data-testid="stMetricValue"] div {
+        color: #002B36 !important;
+    }
+
+    /* Tabs Styling */
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
         font-size: 1.2rem;
         font-weight: 600;
+        color: #002B36;
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 # ==========================================
 # 2. THE LOGIC ENGINE (The Brain)
