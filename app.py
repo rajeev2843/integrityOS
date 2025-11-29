@@ -3,51 +3,79 @@ import pandas as pd
 import numpy as np
 
 # ==========================================
-# 1. CONFIGURATION & STYLING
+# 1. CONFIGURATION & HIGH-VISIBILITY STYLING
 # ==========================================
 st.set_page_config(page_title="IntegrityOS", layout="wide", page_icon="🏛️")
 
+# We use !important to OVERRIDE the phone's Dark Mode settings
 st.markdown("""
     <style>
-    /* Main Background */
-    .main { background-color: #F0F2F6; }
-    
-    /* Headings */
-    h1, h2, h3 { color: #002B36; }
-    
-    /* The Metric Cards - FORCE TEXT COLOR */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #008080;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    /* 1. FORCE MAIN BACKGROUND TO WHITE */
+    .stApp {
+        background-color: #FFFFFF !important;
     }
-    div[data-testid="stMetricLabel"] p { color: #002B36 !important; font-weight: 600; }
-    div[data-testid="stMetricValue"] div { color: #002B36 !important; }
+    
+    /* 2. FORCE SIDEBAR TO LIGHT GRAY */
+    [data-testid="stSidebar"] {
+        background-color: #F8F9FA !important;
+        border-right: 1px solid #E0E0E0;
+    }
+    
+    /* 3. TEXT VISIBILITY (Global) */
+    h1, h2, h3, h4, p, label, .stMarkdown {
+        color: #0F172A !important; /* Dark Slate (Almost Black) */
+    }
+    
+    /* 4. METRIC CARDS (The Boxes) */
+    div[data-testid="stMetric"] {
+        background-color: #F1F5F9 !important; /* Very light blue-gray */
+        border: 1px solid #CBD5E1;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 6px solid #0F172A; /* Dark Navy Accent */
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    div[data-testid="stMetricLabel"] p {
+        color: #475569 !important; /* Slate Gray for Label */
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+    }
+    div[data-testid="stMetricValue"] div {
+        color: #0F172A !important; /* Dark Navy for Number */
+        font-weight: 800 !important;
+    }
 
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #002B36;
+    /* 5. FIX THE DARK TABLE ISSUE */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #E2E8F0;
+    }
+    /* Force table text color */
+    div[data-testid="stDataFrame"] * {
+        color: #0F172A !important; 
+        background-color: #FFFFFF !important;
+    }
+
+    /* 6. INPUT FIELDS & BUTTONS */
+    .stNumberInput input {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. THE LOGIC ENGINE (The Brain)
+# 2. THE LOGIC ENGINE (Unchanged)
 # ==========================================
 class IntegrityEngine:
     def __init__(self):
         self.config = {
-            "electricity_rate": 8.5,  # INR per kWh
-            "scrap_steel_rate": 35.0, # INR per kg
-            "co2_factor": 0.82        # kgCO2 per kWh
+            "electricity_rate": 8.5,
+            "scrap_steel_rate": 35.0, 
+            "co2_factor": 0.82
         }
 
     def generate_dummy_tb(self):
-        """Generates a mock Trial Balance if no file is uploaded."""
         data = {
             "Ledger_Name": ["Sales Account", "MSEDCL Electricity Exp (Factory)", "Scrap Sales (Metal)", 
                             "Staff Welfare & PF", "Regulatory Fines (GST)", "Office Rent", "Donation to Local NGO"],
@@ -57,21 +85,14 @@ class IntegrityEngine:
         return pd.DataFrame(data)
 
     def normalize_columns(self, df, map_dict):
-        """Renames user columns to System Standard columns."""
-        # map_dict looks like: {'User_Ledger_Col': 'Ledger_Name', ...}
-        # Invert the dict to use in pandas rename
         rename_map = {v: k for k, v in map_dict.items()}
-        
-        # We need to ensure the user selected columns exist
         final_df = pd.DataFrame()
         final_df['Ledger_Name'] = df[map_dict['Ledger_Name']]
         final_df['Group'] = df[map_dict['Group']]
         final_df['Amount_INR'] = pd.to_numeric(df[map_dict['Amount_INR']], errors='coerce').fillna(0)
-        
         return final_df
 
     def map_ledgers(self, df):
-        """Zone 1: Tagging Ledgers (The Mapper)"""
         def get_tag(name):
             name = str(name).lower()
             if "electricity" in name or "power" in name: return "ENERGY_SCOPE2"
@@ -86,7 +107,6 @@ class IntegrityEngine:
         return df
 
     def run_estimation(self, df, elec_rate, scrap_rate):
-        """Zone 3: The Calculator"""
         # 1. Energy
         energy_rows = df[df['System_Tag'] == 'ENERGY_SCOPE2']
         total_energy_spend = energy_rows['Amount_INR'].sum()
@@ -108,7 +128,6 @@ class IntegrityEngine:
         }
 
     def generate_pbc_checklist(self, df):
-        """Zone 2: The PBC Automator"""
         checklist = []
         for index, row in df.iterrows():
             if "rent" in str(row['Ledger_Name']).lower() and row['Amount_INR'] > 50000:
@@ -123,56 +142,46 @@ class IntegrityEngine:
         return pd.DataFrame(checklist)
 
 # ==========================================
-# 3. UI LAYOUT (The Command Center)
+# 3. UI LAYOUT
 # ==========================================
 def main():
     engine = IntegrityEngine()
     
-    # --- SIDEBAR: CONTROLS & INGESTION ---
+    # --- SIDEBAR ---
     with st.sidebar:
-        st.title("🏛️ IntegrityOS")
+        st.title("IntegrityOS") 
         st.caption("Financial-to-Non-Financial Bridge")
         st.markdown("---")
         
-        # A. File Upload
-        st.subheader("📂 1. Data Source")
+        st.subheader("1. Data Source")
         uploaded_file = st.file_uploader("Upload Trial Balance", type=['xlsx', 'csv'])
         
-        # B. Configuration
-        st.subheader("⚙️ 2. Calibration")
-        elec_rate = st.number_input("Avg Electricity Rate (₹/kWh)", value=8.5, step=0.1)
-        scrap_rate = st.number_input("Scrap Metal Rate (₹/kg)", value=35.0, step=1.0)
-        st.info("Status: System Ready 🟢")
+        st.subheader("2. Calibration")
+        elec_rate = st.number_input("Avg Elec Rate (₹/kWh)", value=8.5, step=0.1)
+        scrap_rate = st.number_input("Scrap Rate (₹/kg)", value=35.0, step=1.0)
+        st.success("System Ready 🟢")
 
-    # --- DATA LOADING & MAPPING LOGIC ---
+    # --- DATA LOADING ---
     if uploaded_file:
         try:
-            # Load file based on extension
             if uploaded_file.name.endswith('.csv'):
                 raw_df = pd.read_csv(uploaded_file)
             else:
                 raw_df = pd.read_excel(uploaded_file)
             
-            st.success(f"Loaded: {uploaded_file.name}")
+            st.info(f"Loaded: {uploaded_file.name}")
             
-            # THE MAPPER UI
-            with st.expander("🛠️ Column Mapping (Standardize Data)", expanded=True):
-                st.write("Map your file columns to IntegrityOS standards:")
+            with st.expander("Column Mapping (Standardize Data)", expanded=True):
+                st.write("Match your columns to IntegrityOS:")
                 cols = raw_df.columns.tolist()
-                
                 c1, c2, c3 = st.columns(3)
-                user_ledger = c1.selectbox("Select 'Ledger Name' Column", cols, index=0)
-                user_amount = c2.selectbox("Select 'Amount' Column", cols, index=1 if len(cols)>1 else 0)
-                user_group = c3.selectbox("Select 'Group/Type' Column", cols, index=2 if len(cols)>2 else 0)
+                user_ledger = c1.selectbox("Ledger Name Col", cols, index=0)
+                user_amount = c2.selectbox("Amount Col", cols, index=1 if len(cols)>1 else 0)
+                user_group = c3.selectbox("Group Col", cols, index=2 if len(cols)>2 else 0)
                 
-                # Normalize Data
-                mapping = {
-                    'Ledger_Name': user_ledger,
-                    'Amount_INR': user_amount,
-                    'Group': user_group
-                }
+                mapping = {'Ledger_Name': user_ledger, 'Amount_INR': user_amount, 'Group': user_group}
                 
-                if st.button("Apply Mapping & Run Integrity Engine"):
+                if st.button("Run Integrity Engine"):
                     processed_df = engine.normalize_columns(raw_df, mapping)
                     processed_df = engine.map_ledgers(processed_df)
                     st.session_state['processed_df'] = processed_df
@@ -182,25 +191,19 @@ def main():
             st.error(f"Error reading file: {e}")
             st.stop()
     else:
-        # Use Dummy Data if no upload
         raw_df = engine.generate_dummy_tb()
         processed_df = engine.map_ledgers(raw_df)
         st.session_state['processed_df'] = processed_df
-        st.session_state['data_active'] = False # Just dummy mode
+        st.session_state['data_active'] = False
 
-    # Check if we have valid data to show
+    # --- MAIN DASHBOARD ---
     if 'processed_df' in st.session_state:
         df_display = st.session_state['processed_df']
-        
-        # Run Calculation Engine
         metrics = engine.run_estimation(df_display, elec_rate, scrap_rate)
         pbc_df = engine.generate_pbc_checklist(df_display)
 
-        # --- MAIN DASHBOARD ---
-        st.title("IntegrityOS Dashboard")
-        if not st.session_state.get('data_active', False):
-            st.caption("⚠️ Using DEMO DATA. Upload a file in the sidebar to analyze real client data.")
-
+        st.header("IntegrityOS Dashboard")
+        
         tab1, tab2, tab3 = st.tabs(["📊 Command Center", "📋 Smart PBC", "🌱 BRSR Builder"])
 
         with tab1:
@@ -214,7 +217,15 @@ def main():
             
             st.markdown("---")
             st.subheader("Traceability Matrix (The Audit Pin)")
-            st.dataframe(df_display, use_container_width=True)
+            # Using data_editor instead of dataframe for better visibility
+            st.data_editor(
+                df_display, 
+                use_container_width=True, 
+                disabled=True,
+                column_config={
+                    "Amount_INR": st.column_config.NumberColumn(format="₹ %.2f")
+                }
+            )
 
         with tab2:
             st.subheader("Automated Requirement Checklist")
@@ -224,9 +235,9 @@ def main():
                 st.success("No document requirements triggered.")
 
         with tab3:
-            st.subheader("Principle 6 (Environment) - Draft")
-            st.info(f"💡 **Logic:** Found ₹{metrics['energy_spend']:,} in Ledgers '{metrics['energy_audit_trail']}'. Rate: ₹{elec_rate}/unit.")
-            st.text_area("Draft Narrative", value=f"Estimated consumption is {metrics['kwh']:.2f} kWh, resulting in {metrics['tco2']:.2f} Tons CO2.", height=150)
+            st.subheader("Principle 6 Draft")
+            st.info(f"Calculation: ₹{metrics['energy_spend']:,} / ₹{elec_rate} (Rate) = {metrics['kwh']:.2f} kWh")
+            st.text_area("Narrative", value=f"Estimated consumption is {metrics['kwh']:.2f} kWh ({metrics['tco2']:.2f} Tons CO2).", height=150)
 
 if __name__ == "__main__":
     main()
