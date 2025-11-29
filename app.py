@@ -98,7 +98,8 @@ st.markdown("""
 
 def init_db():
     """Initializes in-memory SQLite for demo purposes."""
-    conn = sqlite3.connect(':memory:') # Using memory for instant demo speed
+    # FIX: check_same_thread=False is required for Streamlit's environment
+    conn = sqlite3.connect(':memory:', check_same_thread=False) 
     c = conn.cursor()
     c.execute('''CREATE TABLE users (username TEXT, password TEXT, role TEXT)''')
     # Seed Data
